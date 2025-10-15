@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Application</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+  <div class="container mx-auto p-4 max-w-lg bg-white rounded-lg shadow-lg">
+    <!-- Register Section -->
+    <div id="registerSection" class="space-y-4">
+      <h2 class="text-2xl font-bold text-center">Register</h2>
+      <form id="registerForm" class="space-y-4">
+        <input id="regUsername" type="text" placeholder="Username" required class="w-full p-2 border rounded">
+        <select id="regRole" required class="w-full p-2 border rounded">
+          <option value="" disabled selected>Select Role</option>
+          <option value="user">User</option>
+          <option value="coach">Coach</option>
+        </select>
+        <button type="submit" class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Register</button>
+      </form>
+      <p class="text-center">Already registered? <a href="#" id="showLogin" class="text-blue-500">Login</a></p>
+    </div>
+
+    <!-- Login Section -->
+    <div id="loginSection" class="space-y-4 hidden">
+      <h2 class="text-2xl font-bold text-center">Login</h2>
+      <form id="loginForm" class="space-y-4">
+        <input id="loginUsername" type="text" placeholder="Username" required class="w-full p-2 border rounded">
+        <select id="loginRole" required class="w-full p-2 border rounded">
+          <option value="" disabled selected>Select Role</option>
+          <option value="user">User</option>
+          <option value="coach">Coach</option>
+        </select>
+        <button type="submit" class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Login</button>
+      </form>
+      <p class="text-center">Need to register? <a href="#" id="showRegister" class="text-blue-500">Register</a></p>
+    </div>
+
+    <!-- Chat Section -->
+    <div id="chatSection" class="space-y-4 hidden">
+      <h2 class="text-2xl font-bold text-center">Chat</h2>
+      <div class="flex space-x-4">
+        <!-- Online Users -->
+        <div class="w-1/3 bg-gray-100 p-2 rounded h-96 overflow-y-auto">
+          <h3 class="font-semibold">Online Users</h3>
+          <ul id="onlineUsers" class="space-y-2"></ul>
+        </div>
+        <!-- Chat Area -->
+        <div class="w-2/3 space-y-4">
+          <div id="messages" class="bg-gray-100 p-4 rounded h-80 overflow-y-auto"></div>
+          <form id="messageForm" class="flex space-x-2">
+            <input id="messageInput" type="text" placeholder="Type a message" required
+              class="flex-1 p-2 border rounded">
+            <button type="submit" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Send</button>
+          </form>
+          <select id="receiverSelect" class="w-full p-2 border rounded">
+            <option value="" disabled selected>Select Receiver</option>
+          </select>
+        </div>
+      </div>
+      <button id="logout" class="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600">Logout</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io('http://localhost:3000');
+    let currentUser = null;
+
+    // DOM Elements
+    const registerSection = document.getElementById('registerSection');
+    const loginSection = document.getElementById('loginSection');
+    const chatSection = document.getElementById('chatSection');
+    const registerForm = document.getElementById('registerForm');
+    const loginForm = document.getElementById('loginForm');
+    const messageForm = document.getElementById('messageForm');
+    const messages = document.getElementById('messages');
+    const onlineUsers = document.getElementById('onlineUsers');
+    const receiverSelect = document.getElementById('receiverSelect');
+    const showLogin = document.getElementById('showLogin');
+    const showRegister = document.getElementById('showRegister');
+    const logout = document.getElementById('logout');
+    // const uuid = require("uuid")
+    // Toggle between register and login
+    showLogin.addEventListener('click', () => {
+      registerSection.classList.add('hidden');
+      loginSection.classList.remove('hidden');
+    });
+
+    showRegister.addEventListener('click', () => {
+      loginSection.classList.add('hidden');
+      registerSection.classList.remove('hidden');
+    });
+
+    // Register
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('regUsername').value;
+      const user_role = document.getElementById('regRole').value;
+
+      try {
+        const response = await fetch('http://localhost:3000/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, user_role }),
+        });
+        const data = await response.json();
+        if (response.ok) {
+          alert('Registration successful! Please login.');
+          registerSection.classList.add('hidden');
+          loginSection.classList.remove('hidden');
+        } else {
+          alert(data.error);
+        }
+      } catch (error) {
+        alert('Error registering: ' + error.message);
+      }
+    });
+
+    // Login
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const username = document.getElementById('loginUsername').value;
+      const user_role = document.getElementById('loginRole').value;
+
+      // Simulate fetching user_uuid (in a real app, you'd fetch this from the server)
+      const user_uuid = username + '-' + Math.random().toString(36).substr(2, 9); // Placeholder
+
+      currentUser = { username, user_uuid, user_role };
+
+      socket.emit('login', { user_uuid, user_role });
+      loginSection.classList.add('hidden');
+      chatSection.classList.remove('hidden');
+
+      fetchAllUsers(); // ⬅️ Add this line
+
+    });
+
+
+    async function fetchAllUsers() {
+      try {
+        const response = await fetch('http://localhost:3000/api/users', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const users = await response.json();
+
+        if (response.ok) {
+          receiverSelect.innerHTML = '<option value="" disabled selected>Select Receiver</option>';
+          users.forEach(user => {
+            if (user.user_uuid !== currentUser.user_uuid) {
+              const option = document.createElement('option');
+              option.value = user.user_uuid;
+              option.textContent = `${user.username} (${user.user_role})`;
+              receiverSelect.appendChild(option);
+            }
+          });
+        } else {
+          alert('Failed to fetch users: ' + users.error);
+        }
+      } catch (error) {
+        alert('Error fetching users: ' + error.message);
+      }
+    }
+
+
+    // Send Message
+    messageForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const content = document.getElementById('messageInput').value;
+      const receiverId = receiverSelect.value;
+      if (!receiverId) {
+        alert('Please select a receiver.');
+        return;
+      }
+
+      socket.emit('sendMessage', {
+        senderId: currentUser.user_uuid,
+        receiverId,
+        content,
+        message_type: 'single',
+      });
+
+      // Add message to UI (sender's view)
+      appendMessage(currentUser.username, content, 'right');
+      document.getElementById('messageInput').value = '';
+    });
+
+    // Receive Message
+    socket.on('receiveMessage', (data) => {
+      const isSender = data.senderId === currentUser.user_uuid;
+      appendMessage(isSender ? currentUser.username : 'Other', data.content, isSender ? 'right' : 'left');
+    });
+
+    // Update Online Users
+    socket.on('online', (users) => {
+      onlineUsers.innerHTML = '';
+      receiverSelect.innerHTML = '<option value="" disabled selected>Select Receiver</option>';
+      users.forEach((user) => {
+        if (user.user_uuid !== currentUser.user_uuid) {
+          const li = document.createElement('li');
+          li.textContent = `${user.user_uuid} (${user.user_role})`;
+          onlineUsers.appendChild(li);
+
+          const option = document.createElement('option');
+          option.value = user.user_uuid;
+          option.textContent = `${user.user_uuid} (${user.user_role})`;
+          receiverSelect.appendChild(option);
+        }
+      });
+    });
+
+    // Append Message to UI
+    function appendMessage(sender, content, position) {
+      const div = document.createElement('div');
+      div.className = `p-2 rounded mb-2 ${position === 'right' ? 'bg-blue-100 ml-auto' : 'bg-gray-200 mr-auto'} max-w-xs`;
+      div.innerHTML = `<strong>${sender}</strong>: ${content}`;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    // Logout
+    logout.addEventListener('click', () => {
+      socket.disconnect();
+      chatSection.classList.add('hidden');
+      registerSection.classList.remove('hidden');
+      currentUser = null;
+    });
+  </script>
+</body>
+
+</html>

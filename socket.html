@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #chat-container {
+            max-width: 600px;
+            margin: auto;
+        }
+        #messages {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+            margin-bottom: 10px;
+        }
+        #message-input {
+            width: 80%;
+            padding: 5px;
+        }
+        #send-button {
+            padding: 5px 10px;
+        }
+        #conversation-select {
+            margin-bottom: 10px;
+            width: 100%;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h2>Real-Time Chat</h2>
+        <select id="conversation-select">
+            <option value="">Select a conversation</option>
+            <!-- Populated dynamically -->
+        </select>
+        <div id="messages"></div>
+        <input type="text" id="message-input" placeholder="Type a message..." />
+        <button id="send-button">Send</button>
+    </div>
+
+ <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        // User ID (in practice, get from auth system)
+        const userId = prompt('Enter your user ID (e.g., user1):') || 'user1';
+
+        // Connect to Socket.IO server
+        const socket = io('http://localhost:8080', {
+            query: { userId }
+        });
+
+        // DOM elements
+        const conversationSelect = document.getElementById('conversation-select');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+
+        // Sample conversations (in practice, fetch from API)
+        const conversations = [
+            { id: '6800dcb18556b8c4747769f8', type: 'single', name: 'Alice & Bob' },
+            { id: '6800dcb18556b8c4747769f8', type: 'group', name: 'Project Team' }
+        ];
+
+        // Populate conversation dropdown
+        conversations.forEach(conv => {
+            const option = document.createElement('option');
+            option.value = conv.id;
+            option.textContent = conv.name;
+            conversationSelect.appendChild(option);
+        });
+
+        // Socket.IO event handlers
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            messagesDiv.innerHTML += '<p>Connected to chat server</p>';
+        });
+
+        socket.on('chat-conversations', (message) => {
+            if (message.conversationId === conversationSelect.value) {
+                messagesDiv.innerHTML += `<p><strong>User ${message.senderId}:</strong> ${message.content}</p>`;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        });
+
+        socket.on('error', (data) => {
+            alert(data.error);
+        });
+
+        socket.on('user-connection', (count) => {
+            console.log(`Online users: ${count}`);
+        });
+
+        // Send message
+        sendButton.addEventListener('click', () => {
+            const conversationId = conversationSelect.value;
+            const content = messageInput.value.trim();
+
+            if (!conversationId) {
+                alert('Please select a conversation');
+                return;
+            }
+            if (!content) {
+                alert('Please enter a message');
+                return;
+            }
+
+            const message = {
+                conversationId,
+                content,
+                type: 'single',
+                name:"Alice & Bob"
+            };
+
+            socket.emit('chat-conversations', JSON.stringify(message));
+            messageInput.value = '';
+        });
+
+        // Handle Enter key
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+    </script>
+</body>
+</html>
